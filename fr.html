@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroScan AI — 3D Radiology Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:wght@100;200;300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --cyan:#00f0ff;--cyan-dim:rgba(0,240,255,.15);
+  --magenta:#ff00aa;--magenta-dim:rgba(255,0,170,.12);
+  --emerald:#00ff88;--emerald-dim:rgba(0,255,136,.1);
+  --gold:#ffb800;--gold-dim:rgba(255,184,0,.1);
+  --bg:#020810;--surface:rgba(6,14,30,.88);
+  --glass:rgba(8,20,45,.55);--border:rgba(0,240,255,.1);
+  --text:#c0d4e4;--text-bright:#e8f2ff;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Rajdhani',sans-serif;background:var(--bg);color:var(--text);
+  min-height:100vh;overflow-x:hidden;
+}
+
+/* ===== THREE.JS CANVASES ===== */
+#heroCanvas{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  z-index:0;pointer-events:none;
+}
+.hero-3d-wrapper{
+  position:relative;width:100%;min-height:700px;overflow:hidden;
+}
+
+.card-canvas{
+  position:absolute;inset:0;z-index:0;pointer-events:none;
+  border-radius:20px;
+}
+
+/* ===== GLOBAL BG ===== */
+.bg-layer{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 70% 50% at 25% 15%,rgba(0,240,255,.04),transparent),
+    radial-gradient(ellipse 50% 40% at 75% 85%,rgba(255,0,170,.03),transparent);
+}
+.noise-overlay{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:128px 128px;
+}
+
+/* ===== HEADER ===== */
+header{
+  position:relative;z-index:20;padding:18px 40px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(30px);background:rgba(2,8,16,.6);
+}
+.logo{display:flex;align-items:center;gap:14px}
+.logo-icon{width:44px;height:44px;position:relative;display:flex;align-items:center;justify-content:center}
+.logo-ring{
+  position:absolute;inset:0;border:2px solid var(--cyan);border-radius:50%;
+  animation:spin 8s linear infinite;
+}
+.logo-ring:nth-child(2){inset:5px;border-color:var(--magenta);animation-direction:reverse;animation-duration:5s}
+.logo-ring:nth-child(3){inset:10px;border-color:var(--emerald);animation-duration:12s}
+.logo-core{
+  width:10px;height:10px;background:var(--cyan);border-radius:50%;
+  box-shadow:0 0 16px var(--cyan),0 0 40px rgba(0,240,255,.4);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4);opacity:.7}}
+
+.logo-text h1{
+  font-family:'Orbitron',monospace;font-size:1.35rem;font-weight:900;
+  background:linear-gradient(135deg,var(--cyan),var(--emerald));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  letter-spacing:4px;
+}
+.logo-text span{font-size:.62rem;letter-spacing:7px;color:rgba(0,240,255,.4);text-transform:uppercase;display:block;margin-top:2px}
+
+.nav-links{display:flex;gap:28px}
+.nav-links a{
+  color:var(--text);text-decoration:none;font-size:.78rem;
+  letter-spacing:2px;text-transform:uppercase;font-weight:500;
+  transition:.3s;position:relative;padding-bottom:3px;
+}
+.nav-links a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--cyan);transition:width .3s}
+.nav-links a:hover{color:var(--cyan)}
+.nav-links a:hover::after{width:100%}
+
+.status{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 16px;border:1px solid rgba(0,255,136,.18);
+  border-radius:30px;background:rgba(0,255,136,.04);
+}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--emerald);box-shadow:0 0 10px var(--emerald);animation:pulse 2s infinite}
+.status span{font-size:.68rem;color:var(--emerald);letter-spacing:2px;text-transform:uppercase}
+
+/* ===== HERO SECTION ===== */
+.hero-content{
+  position:relative;z-index:10;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:80px 60px;gap:40px;
+  min-height:700px;
+}
+.hero-left{flex:1;max-width:550px}
+.hero-right{flex:1;display:flex;justify-content:center;align-items:center;position:relative;min-height:400px}
+
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:5px 18px;border:1px solid var(--border);
+  border-radius:30px;background:var(--glass);backdrop-filter:blur(10px);
+  font-size:.7rem;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);
+  margin-bottom:22px;animation:fadeUp .8s ease-out;
+}
+.hero-badge .dot{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:pulse 1.5s infinite}
+
+.hero-left h2{
+  font-family:'Orbitron',monospace;font-size:clamp(1.8rem,4vw,3rem);font-weight:900;
+  letter-spacing:1px;line-height:1.2;margin-bottom:18px;
+  animation:fadeUp .8s ease-out .15s both;
+}
+.gradient-text{
+  background:linear-gradient(135deg,var(--cyan),var(--magenta) 50%,var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-size:200% auto;animation:shine 5s linear infinite;
+}
+@keyframes shine{to{background-position:200% center}}
+.hero-left p{
+  font-size:1rem;color:rgba(200,218,232,.5);line-height:1.8;font-weight:300;
+  animation:fadeUp .8s ease-out .3s both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+
+/* hologram ring around 3D model */
+.holo-ring{
+  position:absolute;width:340px;height:340px;
+  border:1px solid rgba(0,240,255,.08);border-radius:50%;
+  animation:spin 20s linear infinite;
+}
+.holo-ring:nth-child(2){width:380px;height:380px;animation-direction:reverse;animation-duration:28s;border-color:rgba(255,0,170,.06)}
+.holo-ring:nth-child(3){width:300px;height:300px;animation-duration:15s;border-color:rgba(0,255,136,.06)}
+
+/* 3D model container */
+#brainContainer{
+  width:400px;height:400px;position:relative;z-index:5;
+  cursor:grab;pointer-events:all;
+}
+#brainContainer:active{cursor:grabbing}
+
+/* ===== SCAN TYPE CARDS ===== */
+.scan-section{position:relative;z-index:10;padding:20px 40px 60px;perspective:1400px}
+.section-label{text-align:center;margin-bottom:44px;animation:fadeUp .8s ease-out .5s both}
+.section-label h3{
+  font-family:'Orbitron',monospace;font-size:.8rem;
+  letter-spacing:7px;text-transform:uppercase;color:var(--cyan);
+  position:relative;display:inline-block;
+}
+.section-label h3::before,.section-label h3::after{
+  content:'';position:absolute;top:50%;width:70px;height:1px;
+}
+.section-label h3::before{right:calc(100% + 18px);background:linear-gradient(90deg,transparent,var(--cyan))}
+.section-label h3::after{left:calc(100% + 18px);background:linear-gradient(90deg,var(--cyan),transparent)}
+
+.cards-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:24px;
+  max-width:1320px;margin:0 auto;
+}
+
+.scan-card{
+  position:relative;border-radius:20px;cursor:pointer;
+  transform-style:preserve-3d;
+  transition:transform .5s cubic-bezier(.23,1,.32,1),box-shadow .4s;
+  animation:cardIn .7s ease-out both;
+}
+.scan-card:nth-child(1){animation-delay:.55s}
+.scan-card:nth-child(2){animation-delay:.7s}
+.scan-card:nth-child(3){animation-delay:.85s}
+.scan-card:nth-child(4){animation-delay:1s}
+@keyframes cardIn{from{opacity:0;transform:rotateY(-25deg) translateZ(-60px) scale(.85)}to{opacity:1;transform:none}}
+
+.scan-card.active{transform:translateY(-18px) scale(1.04)}
+
+.card-inner{
+  position:relative;border-radius:20px;overflow:hidden;
+  border:1px solid var(--border);background:var(--surface);
+  backdrop-filter:blur(25px);
+  padding:28px 22px;display:flex;flex-direction:column;align-items:center;
+  min-height:420px;transition:border-color .4s,background .4s;
+}
+.scan-card:hover .card-inner{border-color:rgba(255,255,255,.08)}
+.scan-card.active .card-inner{border-color:var(--card-color);background:rgba(6,14,30,.95)}
+
+/* card glow */
+.card-glow{
+  position:absolute;inset:-3px;border-radius:23px;
+  opacity:0;transition:opacity .5s;z-index:-1;filter:blur(25px);
+}
+.scan-card:hover .card-glow{opacity:.5}
+.scan-card.active .card-glow{opacity:1}
+
+/* card themes */
+.scan-card[data-type="mri"]{--card-color:var(--cyan);--card-dim:var(--cyan-dim)}
+.scan-card[data-type="ct"]{--card-color:var(--magenta);--card-dim:var(--magenta-dim)}
+.scan-card[data-type="xray"]{--card-color:var(--emerald);--card-dim:var(--emerald-dim)}
+.scan-card[data-type="ultrasound"]{--card-color:var(--gold);--card-dim:var(--gold-dim)}
+
+.scan-card[data-type="mri"] .card-glow{background:var(--cyan)}
+.scan-card[data-type="ct"] .card-glow{background:var(--magenta)}
+.scan-card[data-type="xray"] .card-glow{background:var(--emerald)}
+.scan-card[data-type="ultrasound"] .card-glow{background:var(--gold)}
+
+/* 3D model area inside card */
+.card-3d-viewport{
+  width:140px;height:140px;margin-bottom:18px;
+  position:relative;
+}
+
+.card-label{
+  font-family:'Orbitron',monospace;font-size:.95rem;font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;color:var(--card-color);
+  text-shadow:0 0 20px var(--card-dim);margin-bottom:6px;
+}
+.card-desc{
+  font-size:.78rem;color:rgba(200,218,232,.45);text-align:center;
+  line-height:1.6;font-weight:300;margin-bottom:16px;
+}
+
+.card-specs{width:100%;display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.spec-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 10px;border-radius:6px;
+  background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.025);
+  font-size:.68rem;
+}
+.spec-row .label{color:rgba(200,218,232,.35);letter-spacing:1px;text-transform:uppercase}
+.spec-row .value{color:var(--card-color);font-weight:600;font-family:'Orbitron',monospace;font-size:.64rem}
+
+.card-btn{
+  margin-top:14px;padding:9px 28px;
+  border:1px solid var(--card-color);background:transparent;
+  color:var(--card-color);border-radius:30px;
+  font-family:'Orbitron',monospace;font-size:.65rem;
+  letter-spacing:3px;text-transform:uppercase;cursor:pointer;
+  transition:.4s;position:relative;overflow:hidden;
+}
+.card-btn::before{
+  content:'';position:absolute;inset:0;background:var(--card-color);
+  opacity:0;transition:opacity .4s;border-radius:30px;
+}
+.card-btn span{position:relative;z-index:1}
+.card-btn:hover::before{opacity:.12}
+.scan-card.active .card-btn{background:var(--card-color);color:var(--bg);font-weight:700;box-shadow:0 0 30px var(--card-dim)}
+.scan-card.active .card-btn::before{opacity:0}
+
+/* ===== UPLOAD ===== */
+.upload-section{position:relative;z-index:10;padding:0 40px 50px;max-width:880px;margin:0 auto;animation:fadeUp .8s ease-out 1.1s both}
+.upload-zone{
+  position:relative;border:2px dashed rgba(0,240,255,.18);
+  border-radius:22px;padding:55px 40px;text-align:center;
+  background:var(--glass);backdrop-filter:blur(25px);
+  transition:.5s;cursor:pointer;overflow:hidden;
+}
+.upload-zone:hover{border-color:var(--cyan);background:rgba(0,240,255,.02);box-shadow:0 0 50px rgba(0,240,255,.06)}
+.upload-zone.dragover{border-color:var(--emerald);background:rgba(0,255,136,.04);transform:scale(1.015)}
+.upload-zone.has-file{border-color:var(--emerald);border-style:solid;background:rgba(0,255,136,.02)}
+
+.upload-corner{position:absolute;width:18px;height:18px;border:2px solid var(--cyan);opacity:.35}
+.upload-corner.tl{top:10px;left:10px;border-right:none;border-bottom:none;border-radius:3px 0 0 0}
+.upload-corner.tr{top:10px;right:10px;border-left:none;border-bottom:none;border-radius:0 3px 0 0}
+.upload-corner.bl{bottom:10px;left:10px;border-right:none;border-top:none;border-radius:0 0 0 3px}
+.upload-corner.br{bottom:10px;right:10px;border-left:none;border-top:none;border-radius:0 0 3px 0}
+
+.upload-icon{
+  width:58px;height:58px;margin:0 auto 18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--cyan-dim);border:1px solid rgba(0,240,255,.15);
+  animation:glow 3s ease-in-out infinite;
+}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(0,240,255,.2)}50%{box-shadow:0 0 0 18px rgba(0,240,255,0)}}
+.upload-icon svg{width:26px;height:26px;stroke:var(--cyan);stroke-width:1.5;fill:none}
+
+.upload-zone h4{font-family:'Orbitron',monospace;font-size:.85rem;letter-spacing:3px;color:var(--text-bright);margin-bottom:6px}
+.upload-zone p{font-size:.78rem;color:rgba(200,218,232,.35)}
+.formats{margin-top:14px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.format-tag{padding:3px 10px;border-radius:20px;font-size:.62rem;letter-spacing:2px;text-transform:uppercase;border:1px solid rgba(255,255,255,.05);color:rgba(200,218,232,.35);background:rgba(255,255,255,.015)}
+
+.file-info{display:none;margin-top:14px;padding:10px 18px;border-radius:10px;background:rgba(0,255,136,.04);border:1px solid rgba(0,255,136,.12);font-size:.78rem;color:var(--emerald);align-items:center;gap:8px;justify-content:center}
+.file-info.visible{display:flex}
+.file-info svg{width:16px;height:16px;stroke:var(--emerald);fill:none;stroke-width:2}
+
+#fileInput{display:none}
+
+/* ===== ANALYZE BTN ===== */
+.analyze-section{position:relative;z-index:10;text-align:center;padding:0 40px 70px;animation:fadeUp .8s ease-out 1.2s both}
+.analyze-btn{
+  position:relative;padding:16px 56px;border:none;border-radius:50px;cursor:pointer;
+  font-family:'Orbitron',monospace;font-size:.85rem;letter-spacing:4px;text-transform:uppercase;font-weight:700;
+  color:var(--bg);
+  background:linear-gradient(135deg,var(--cyan),var(--emerald));
+  box-shadow:0 0 40px rgba(0,240,255,.2),0 0 80px rgba(0,240,255,.08);
+  transition:.4s;overflow:hidden;
+}
+.analyze-btn::before{
+  content:'';position:absolute;inset:-2px;border-radius:52px;
+  background:linear-gradient(135deg,var(--cyan),var(--magenta),var(--gold),var(--emerald));
+  background-size:400% 400%;animation:borderShift 4s linear infinite;
+  z-index:-1;opacity:0;transition:opacity .4s;
+}
+@keyframes borderShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.analyze-btn:hover{transform:translateY(-3px) scale(1.04);box-shadow:0 0 60px rgba(0,240,255,.3),0 0 120px rgba(0,240,255,.12)}
+.analyze-btn:hover::before{opacity:1}
+.analyze-btn:active{transform:scale(.97)}
+.analyze-btn .btn-text{position:relative;z-index:2}
+.analyze-btn .btn-loader{display:none;position:relative;z-index:2}
+.analyze-btn.loading .btn-text{display:none}
+.analyze-btn.loading .btn-loader{display:inline-flex;align-items:center;gap:10px}
+.loader-ring{width:18px;height:18px;border:2px solid rgba(2,8,16,.3);border-top-color:var(--bg);border-radius:50%;animation:spin .8s linear infinite}
+
+/* ===== STATS ===== */
+.stats-bar{
+  position:relative;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);
+  max-width:1100px;margin:0 auto 50px;padding:0 40px;gap:1px;
+  animation:fadeUp .8s ease-out 1.3s both;
+}
+.stat-item{text-align:center;padding:22px 14px;border:1px solid var(--border);background:var(--glass);backdrop-filter:blur(10px)}
+.stat-item:first-child{border-radius:10px 0 0 10px}
+.stat-item:last-child{border-radius:0 10px 10px 0}
+.stat-number{font-family:'Orbitron',monospace;font-size:1.5rem;font-weight:800;color:var(--cyan)}
+.stat-label{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;color:rgba(200,218,232,.35);margin-top:3px}
+
+/* ===== RESULTS ===== */
+.results-section{position:relative;z-index:10;padding:0 40px 70px;max-width:1100px;margin:0 auto;display:none}
+.results-section.visible{display:block;animation:fadeUp .8s ease-out}
+.results-header{text-align:center;margin-bottom:36px}
+.results-header h3{
+  font-family:'Orbitron',monospace;font-size:1.3rem;letter-spacing:3px;
+  background:linear-gradient(135deg,var(--cyan),var(--emerald));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;
+}
+.results-header p{font-size:.82rem;color:rgba(200,218,232,.45)}
+
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.result-card{
+  border-radius:16px;padding:26px;border:1px solid var(--border);
+  background:var(--surface);backdrop-filter:blur(20px);
+  animation:fadeUp .6s ease-out both;
+}
+.result-card:nth-child(1){animation-delay:.1s}
+.result-card:nth-child(2){animation-delay:.2s}
+.result-card:nth-child(3){animation-delay:.3s}
+.result-card h4{
+  font-family:'Orbitron',monospace;font-size:.7rem;letter-spacing:3px;
+  color:var(--cyan);margin-bottom:14px;text-transform:uppercase;
+}
+.result-card.confidence .meter{height:7px;border-radius:7px;background:rgba(255,255,255,.04);overflow:hidden;margin-bottom:8px}
+.meter-fill{height:100%;border-radius:7px;background:linear-gradient(90deg,var(--cyan),var(--emerald));width:0;transition:width 1.5s cubic-bezier(.23,1,.32,1);box-shadow:0 0 10px var(--cyan)}
+.confidence-value{font-family:'Orbitron',monospace;font-size:1.8rem;font-weight:900;color:var(--emerald)}
+
+.finding-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.025)}
+.finding-item:last-child{border:none}
+.finding-dot{width:7px;height:7px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.finding-dot.normal{background:var(--emerald);box-shadow:0 0 8px var(--emerald)}
+.finding-dot.attention{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+.finding-text{font-size:.82rem;line-height:1.6}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:.6rem;letter-spacing:1px;text-transform:uppercase;margin-left:5px;font-family:'Orbitron',monospace}
+.tag.normal{background:rgba(0,255,136,.08);color:var(--emerald)}
+.tag.attention{background:rgba(255,184,0,.08);color:var(--gold)}
+
+.result-card.recommendation{grid-column:1/-1;border-color:rgba(0,240,255,.12);background:linear-gradient(135deg,rgba(0,240,255,.02),rgba(255,0,170,.015))}
+.rec-text{font-size:.88rem;line-height:1.8}
+
+footer{position:relative;z-index:10;text-align:center;padding:28px;border-top:1px solid var(--border);font-size:.65rem;color:rgba(200,218,232,.2);letter-spacing:2px}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:1100px){
+  .cards-grid{grid-template-columns:repeat(2,1fr)}
+  .hero-content{flex-direction:column;text-align:center;padding:60px 30px}
+  .hero-left{max-width:100%}
+}
+@media(max-width:600px){
+  .cards-grid{grid-template-columns:1fr}
+  header{flex-direction:column;gap:12px;padding:14px}
+  .nav-links{display:none}
+  .results-grid{grid-template-columns:1fr}
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+  .stat-item:first-child{border-radius:10px 0 0 0}
+  .stat-item:nth-child(2){border-radius:0 10px 0 0}
+  .stat-item:nth-child(3){border-radius:0 0 0 10px}
+  .stat-item:last-child{border-radius:0 0 10px 0}
+  #brainContainer{width:280px;height:280px}
+}
+
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:rgba(0,240,255,.12);border-radius:3px}
+</style>
+</head>
+<body>
+
+<div class="bg-layer"></div>
+<div class="noise-overlay"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <div class="logo-ring"></div><div class="logo-ring"></div><div class="logo-ring"></div>
+      <div class="logo-core"></div>
+    </div>
+    <div class="logo-text">
+      <h1>NEUROSCAN</h1>
+      <span>3D Radiology Engine</span>
+    </div>
+  </div>
+  <nav class="nav-links">
+    <a href="#">Dashboard</a><a href="#">History</a><a href="#">Models</a><a href="#">Settings</a>
+  </nav>
+  <div class="status"><div class="status-dot"></div><span>Neural Core Online</span></div>
+</header>
+
+<!-- HERO with 3D Brain -->
+<div class="hero-3d-wrapper">
+  <canvas id="heroCanvas"></canvas>
+  <div class="hero-content">
+    <div class="hero-left">
+      <div class="hero-badge"><span class="dot"></span> Deep Learning v5.0 Active</div>
+      <h2>Next-Gen <span class="gradient-text">3D Medical Imaging</span><br>AI Platform</h2>
+      <p>Real-time volumetric analysis powered by transformer neural networks. Upload your scan and witness AI diagnostics with cinematic 3D visualization of findings.</p>
+    </div>
+    <div class="hero-right">
+      <div class="holo-ring"></div>
+      <div class="holo-ring"></div>
+      <div class="holo-ring"></div>
+      <div id="brainContainer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SCAN TYPE CARDS -->
+<section class="scan-section">
+  <div class="section-label"><h3>Select Imaging Modality</h3></div>
+  <div class="cards-grid">
+    <div class="scan-card" data-type="mri" onclick="selectCard(this)">
+      <div class="card-glow"></div>
+      <div class="card-inner">
+        <div class="card-3d-viewport" id="viewport-mri"></div>
+        <div class="card-label">MRI Scan</div>
+        <div class="card-desc">Magnetic resonance for soft tissue, brain, spine & joint visualization</div>
+        <div class="card-specs">
+          <div class="spec-row"><span class="label">Resolution</span><span class="value">0.5mm</span></div>
+          <div class="spec-row"><span class="label">AI Models</span><span class="value">247</span></div>
+          <div class="spec-row"><span class="label">Accuracy</span><span class="value">99.8%</span></div>
+          <div class="spec-row"><span class="label">Scan Time</span><span class="value">~30min</span></div>
+        </div>
+        <button class="card-btn"><span>Select</span></button>
+      </div>
+    </div>
+
+    <div class="scan-card" data-type="ct" onclick="selectCard(this)">
+      <div class="card-glow"></div>
+      <div class="card-inner">
+        <div class="card-3d-viewport" id="viewport-ct"></div>
+        <div class="card-label">CT Scan</div>
+        <div class="card-desc">Cross-sectional tomography for organs, bones & vascular analysis</div>
+        <div class="card-specs">
+          <div class="spec-row"><span class="label">Slice Width</span><span class="value">0.6mm</span></div>
+          <div class="spec-row"><span class="label">AI Models</span><span class="value">312</span></div>
+          <div class="spec-row"><span class="label">Accuracy</span><span class="value">99.6%</span></div>
+          <div class="spec-row"><span class="label">Scan Time</span><span class="value">~10sec</span></div>
+        </div>
+        <button class="card-btn"><span>Select</span></button>
+      </div>
+    </div>
+
+    <div class="scan-card" data-type="xray" onclick="selectCard(this)">
+      <div class="card-glow"></div>
+      <div class="card-inner">
+        <div class="card-3d-viewport" id="viewport-xray"></div>
+        <div class="card-label">X-Ray</div>
+        <div class="card-desc">Radiograph imaging for bone fractures, lung & chest screening</div>
+        <div class="card-specs">
+          <div class="spec-row"><span class="label">Exposure</span><span class="value">0.02s</span></div>
+          <div class="spec-row"><span class="label">AI Models</span><span class="value">189</span></div>
+          <div class="spec-row"><span class="label">Accuracy</span><span class="value">99.4%</span></div>
+          <div class="spec-row"><span class="label">Radiation</span><span class="value">0.1mSv</span></div>
+        </div>
+        <button class="card-btn"><span>Select</span></button>
+      </div>
+    </div>
+
+    <div class="scan-card" data-type="ultrasound" onclick="selectCard(this)">
+      <div class="card-glow"></div>
+      <div class="card-inner">
+        <div class="card-3d-viewport" id="viewport-ultrasound"></div>
+        <div class="card-label">Ultrasound</div>
+        <div class="card-desc">Sound wave imaging for abdominal, cardiac & obstetric diagnostics</div>
+        <div class="card-specs">
+          <div class="spec-row"><span class="label">Frequency</span><span class="value">18MHz</span></div>
+          <div class="spec-row"><span class="label">AI Models</span><span class="value">156</span></div>
+          <div class="spec-row"><span class="label">Accuracy</span><span class="value">99.2%</span></div>
+          <div class="spec-row"><span class="label">Real-time</span><span class="value">60FPS</span></div>
+        </div>
+        <button class="card-btn"><span>Select</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- UPLOAD -->
+<section class="upload-section">
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-corner tl"></div><div class="upload-corner tr"></div>
+    <div class="upload-corner bl"></div><div class="upload-corner br"></div>
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <h4>Upload Medical Scan</h4>
+    <p>Drag & drop your DICOM, NIfTI or image file</p>
+    <div class="formats">
+      <span class="format-tag">.dcm</span><span class="format-tag">.nii</span>
+      <span class="format-tag">.png</span><span class="format-tag">.jpg</span><span class="format-tag">.dicom</span>
+    </div>
+    <div class="file-info" id="fileInfo">
+      <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <span id="fileName"></span>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".dcm,.nii,.png,.jpg,.jpeg,.dicom">
+</section>
+
+<!-- ANALYZE -->
+<section class="analyze-section">
+  <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">
+    <span class="btn-text">⚡ Initialize Neural Analysis</span>
+    <span class="btn-loader"><span class="loader-ring"></span> Processing Scan...</span>
+  </button>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat-item"><span class="stat-number" data-target="2847">0</span><span class="stat-label">Scans Today</span></div>
+  <div class="stat-item"><span class="stat-number" data-target="99.7">0</span><span class="stat-label">% Accuracy</span></div>
+  <div class="stat-item"><span class="stat-number" data-target="847">0</span><span class="stat-label">Conditions</span></div>
+  <div class="stat-item"><span class="stat-number" data-target="12">0</span><span class="stat-label">Sec Avg Time</span></div>
+</div>
+
+<!-- RESULTS -->
+<section class="results-section" id="results">
+  <div class="results-header">
+    <h3>Analysis Complete</h3>
+    <p>Neural network processed 2.4M parameters across 12 diagnostic models</p>
+  </div>
+  <div class="results-grid">
+    <div class="result-card confidence">
+      <h4>Confidence Score</h4>
+      <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+      <span class="confidence-value" id="confValue">0%</span>
+    </div>
+    <div class="result-card">
+      <h4>Primary Assessment</h4>
+      <div class="finding-item"><div class="finding-dot normal"></div><div class="finding-text">No acute abnormalities detected <span class="tag normal">Normal</span></div></div>
+      <div class="finding-item"><div class="finding-dot attention"></div><div class="finding-text">Minor degenerative changes — age-related <span class="tag attention">Monitor</span></div></div>
+      <div class="finding-item"><div class="finding-dot normal"></div><div class="finding-text">All measured parameters within normal range</div></div>
+    </div>
+    <div class="result-card recommendation">
+      <h4>AI Recommendation</h4>
+      <p class="rec-text">Findings are predominantly within normal limits. Minor degenerative changes are consistent with age-related progression. Recommend routine follow-up in 12 months. <strong style="color:var(--cyan)">Note:</strong> AI analysis assists medical professionals and does not replace clinical judgment.</p>
+    </div>
+  </div>
+</section>
+
+<footer>&copy; 2026 NeuroScan AI — Advanced 3D Diagnostic Intelligence</footer>
+
+<script>
+// ============================================================
+//  THREE.JS — HERO BACKGROUND PARTICLE FIELD + VOLUMETRIC LIGHT
+// ============================================================
+(function initHeroBG(){
+  const canvas = document.getElementById('heroCanvas');
+  const renderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true});
+  renderer.setSize(window.innerWidth, 700);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth/700, 0.1, 1000);
+  camera.position.z = 5;
+
+  // Particle field
+  const particleCount = 2000;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount*3);
+  const colors = new Float32Array(particleCount*3);
+  const cyanC = new THREE.Color(0x00f0ff);
+  const magC = new THREE.Color(0xff00aa);
+  const emC = new THREE.Color(0x00ff88);
+  const colArr = [cyanC, magC, emC];
+
+  for(let i=0;i<particleCount;i++){
+    positions[i*3] = (Math.random()-0.5)*16;
+    positions[i*3+1] = (Math.random()-0.5)*10;
+    positions[i*3+2] = (Math.random()-0.5)*10;
+    const c = colArr[Math.floor(Math.random()*3)];
+    colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+
+  const mat = new THREE.PointsMaterial({size:0.025, vertexColors:true, transparent:true, opacity:0.7, sizeAttenuation:true});
+  const points = new THREE.Points(geo, mat);
+  scene.add(points);
+
+  // Volumetric light beams
+  for(let i=0;i<5;i++){
+    const beamGeo = new THREE.CylinderGeometry(0.005, 0.08, 8, 8, 1, true);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: colArr[i%3],
+      transparent:true, opacity:0.04, side:THREE.DoubleSide
+    });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.set((Math.random()-0.5)*6, 0, (Math.random()-0.5)*4 - 2);
+    beam.rotation.z = (Math.random()-0.5)*0.5;
+    scene.add(beam);
+  }
+
+  let mouseX=0, mouseY=0;
+  document.addEventListener('mousemove', e=>{
+    mouseX = (e.clientX/window.innerWidth - 0.5)*2;
+    mouseY = (e.clientY/window.innerHeight - 0.5)*2;
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = Date.now()*0.001;
+    points.rotation.y = t*0.02 + mouseX*0.1;
+    points.rotation.x = mouseY*0.05;
+
+    const pos = geo.attributes.position.array;
+    for(let i=0;i<particleCount;i++){
+      pos[i*3+1] += Math.sin(t + i*0.01)*0.0005;
+    }
+    geo.attributes.position.needsUpdate = true;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize',()=>{
+    renderer.setSize(window.innerWidth, 700);
+    camera.aspect = window.innerWidth/700;
+    camera.updateProjectionMatrix();
+  });
+})();
+
+// ============================================================
+//  THREE.JS — HERO BRAIN MODEL (Wireframe Icosphere + Glow)
+// ============================================================
+(function initBrain(){
+  const container = document.getElementById('brainContainer');
+  const w = container.offsetWidth || 400, h = container.offsetHeight || 400;
+
+  const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, w/h, 0.1, 100);
+  camera.position.z = 3.5;
+
+  // Brain base — subdivided icosahedron with noise displacement
+  const icoGeo = new THREE.IcosahedronGeometry(1.2, 4);
+  const posAttr = icoGeo.attributes.position;
+  for(let i=0;i<posAttr.count;i++){
+    const x=posAttr.getX(i), y=posAttr.getY(i), z=posAttr.getZ(i);
+    const len = Math.sqrt(x*x+y*y+z*z);
+    const noise = 1 + 0.12*Math.sin(x*5)*Math.cos(y*5)*Math.sin(z*5)
+                    + 0.06*Math.sin(x*12+y*8);
+    // flatten slightly to brain shape
+    const scaleY = 0.85 + 0.1*Math.abs(Math.sin(y*3));
+    posAttr.setXYZ(i, x/len*1.2*noise, y/len*1.2*noise*scaleY, z/len*1.2*noise);
+  }
+  icoGeo.computeVertexNormals();
+
+  // Wireframe brain
+  const wireMat = new THREE.MeshBasicMaterial({color:0x00f0ff, wireframe:true, transparent:true, opacity:0.2});
+  const brainWire = new THREE.Mesh(icoGeo, wireMat);
+  scene.add(brainWire);
+
+  // Solid brain with glow
+  const solidMat = new THREE.MeshStandardMaterial({
+    color:0x00f0ff, emissive:0x00f0ff, emissiveIntensity:0.15,
+    transparent:true, opacity:0.08, wireframe:false, roughness:0.8
+  });
+  const brainSolid = new THREE.Mesh(icoGeo.clone(), solidMat);
+  scene.add(brainSolid);
+
+  // Inner glow sphere
+  const glowGeo = new THREE.SphereGeometry(0.7,32,32);
+  const glowMat = new THREE.MeshBasicMaterial({color:0x00f0ff, transparent:true, opacity:0.06});
+  const glowSphere = new THREE.Mesh(glowGeo, glowMat);
+  scene.add(glowSphere);
+
+  // Neural network lines
+  const lineCount = 80;
+  for(let i=0;i<lineCount;i++){
+    const p1 = new THREE.Vector3().randomDirection().multiplyScalar(0.5+Math.random()*0.7);
+    const p2 = new THREE.Vector3().randomDirection().multiplyScalar(0.5+Math.random()*0.7);
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([p1,p2]);
+    const lineMat = new THREE.LineBasicMaterial({color:0x00f0ff, transparent:true, opacity:0.08+Math.random()*0.1});
+    scene.add(new THREE.Line(lineGeo, lineMat));
+  }
+
+  // Neural nodes
+  const nodeGeo = new THREE.SphereGeometry(0.02,8,8);
+  for(let i=0;i<60;i++){
+    const nodeMat = new THREE.MeshBasicMaterial({
+      color: [0x00f0ff,0xff00aa,0x00ff88][i%3],
+      transparent:true, opacity:0.5+Math.random()*0.5
+    });
+    const node = new THREE.Mesh(nodeGeo, nodeMat);
+    node.position.randomDirection().multiplyScalar(0.4+Math.random()*0.8);
+    scene.add(node);
+  }
+
+  // Orbital rings
+  for(let i=0;i<3;i++){
+    const ringGeo = new THREE.TorusGeometry(1.5+i*0.2, 0.005, 8, 100);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color:[0x00f0ff,0xff00aa,0x00ff88][i],
+      transparent:true, opacity:0.12
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI/2 + i*0.4;
+    ring.rotation.y = i*0.6;
+    scene.add(ring);
+    ring._speed = 0.2 + i*0.1;
+    ring._idx = i;
+  }
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+  const pLight = new THREE.PointLight(0x00f0ff, 1.5, 10);
+  pLight.position.set(2,2,3);
+  scene.add(pLight);
+  const pLight2 = new THREE.PointLight(0xff00aa, 0.8, 10);
+  pLight2.position.set(-2,-1,2);
+  scene.add(pLight2);
+
+  let isDragging=false, prevX=0, prevY=0, rotX=0, rotY=0;
+  container.addEventListener('mousedown',e=>{isDragging=true;prevX=e.clientX;prevY=e.clientY});
+  window.addEventListener('mouseup',()=>isDragging=false);
+  window.addEventListener('mousemove',e=>{
+    if(!isDragging) return;
+    rotY += (e.clientX-prevX)*0.005;
+    rotX += (e.clientY-prevY)*0.005;
+    prevX=e.clientX;prevY=e.clientY;
+  });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = Date.now()*0.001;
+
+    brainWire.rotation.y = t*0.15 + rotY;
+    brainWire.rotation.x = Math.sin(t*0.1)*0.1 + rotX;
+    brainSolid.rotation.copy(brainWire.rotation);
+
+    glowSphere.scale.setScalar(1 + Math.sin(t*2)*0.05);
+
+    scene.children.forEach(c=>{
+      if(c.isMesh && c.geometry.type==='TorusGeometry'){
+        c.rotation.z = t * c._speed;
+      }
+    });
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+
+// ============================================================
+//  THREE.JS — CARD 3D MODELS (Mini organs per scan type)
+// ============================================================
+function createCardScene(containerId, type){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const w=140, h=140;
+  const renderer = new THREE.WebGLRenderer({alpha:true, antialias:true});
+  renderer.setSize(w,h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  container.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 50);
+  camera.position.z = 3;
+
+  const colors = {
+    mri:0x00f0ff, ct:0xff00aa, xray:0x00ff88, ultrasound:0xffb800
+  };
+  const mainColor = colors[type];
+
+  let mainObj;
+
+  if(type === 'mri'){
+    // Brain — small icosphere
+    const geo = new THREE.IcosahedronGeometry(0.8,3);
+    const pos = geo.attributes.position;
+    for(let i=0;i<pos.count;i++){
+      const x=pos.getX(i),y=pos.getY(i),z=pos.getZ(i);
+      const l=Math.sqrt(x*x+y*y+z*z);
+      const n=1+0.1*Math.sin(x*6)*Math.cos(y*6)*Math.sin(z*6);
+      pos.setXYZ(i, x/l*0.8*n, y/l*0.7*n, z/l*0.8*n);
+    }
+    mainObj = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({color:mainColor, wireframe:true, transparent:true, opacity:0.35}));
+    scene.add(mainObj);
+
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(0.4,16,16), new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.08}));
+    scene.add(inner);
+  }
+  else if(type === 'ct'){
+    // Stacked CT slices
+    for(let i=0;i<12;i++){
+      const ringGeo = new THREE.RingGeometry(0.3, 0.7, 32);
+      const ringMat = new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.1+i*0.02, side:THREE.DoubleSide});
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.y = (i-5.5)*0.1;
+      ring.rotation.x = Math.PI/2;
+      scene.add(ring);
+    }
+    // Scan plane
+    const planeGeo = new THREE.PlaneGeometry(1.6,0.02);
+    const planeMat = new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.6});
+    mainObj = new THREE.Mesh(planeGeo, planeMat);
+    mainObj.rotation.x = Math.PI/2;
+    scene.add(mainObj);
+  }
+  else if(type === 'xray'){
+    // Ribcage wireframe
+    for(let i=0;i<8;i++){
+      const curve = new THREE.EllipseCurve(0, 0, 0.5-i*0.02, 0.3-i*0.015, 0, Math.PI, false, 0);
+      const pts = curve.getPoints(30);
+      const geo = new THREE.BufferGeometry().setFromPoints(pts.map(p=>new THREE.Vector3(p.x,p.y,0)));
+      const mat = new THREE.LineBasicMaterial({color:mainColor, transparent:true, opacity:0.2+i*0.04});
+      const rib = new THREE.Line(geo, mat);
+      rib.position.y = (i-3.5)*0.12;
+      scene.add(rib);
+    }
+    // Spine
+    const spineGeo = new THREE.CylinderGeometry(0.03,0.03, 1.2, 8);
+    mainObj = new THREE.Mesh(spineGeo, new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.35}));
+    scene.add(mainObj);
+  }
+  else{
+    // Ultrasound — wave cone
+    const coneGeo = new THREE.ConeGeometry(0.8, 1.4, 32, 1, true);
+    mainObj = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({color:mainColor, wireframe:true, transparent:true, opacity:0.2}));
+    mainObj.rotation.x = Math.PI;
+    mainObj.position.y = -0.2;
+    scene.add(mainObj);
+
+    for(let i=0;i<5;i++){
+      const rGeo = new THREE.RingGeometry(0.1+i*0.13, 0.12+i*0.13, 32);
+      const rMat = new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.15-i*0.02, side:THREE.DoubleSide});
+      const wave = new THREE.Mesh(rGeo, rMat);
+      wave.position.y = -0.6-i*0.15;
+      scene.add(wave);
+    }
+  }
+
+  // Orbital ring per card
+  const oGeo = new THREE.TorusGeometry(1, 0.005, 8, 60);
+  const oMat = new THREE.MeshBasicMaterial({color:mainColor, transparent:true, opacity:0.15});
+  const orbital = new THREE.Mesh(oGeo, oMat);
+  orbital.rotation.x = Math.PI/3;
+  scene.add(orbital);
+
+  // Particles
+  const pGeo = new THREE.BufferGeometry();
+  const pPos = new Float32Array(60*3);
+  for(let i=0;i<60;i++){
+    pPos[i*3]=(Math.random()-0.5)*2.5;
+    pPos[i*3+1]=(Math.random()-0.5)*2.5;
+    pPos[i*3+2]=(Math.random()-0.5)*2;
+  }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+  const pMat = new THREE.PointsMaterial({color:mainColor, size:0.03, transparent:true, opacity:0.5});
+  scene.add(new THREE.Points(pGeo, pMat));
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = Date.now()*0.001;
+    if(mainObj){
+      mainObj.rotation.y = t*0.3;
+      if(type==='ct') mainObj.position.y = Math.sin(t*2)*0.5;
+    }
+    orbital.rotation.z = t*0.4;
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
+// Init all card 3D scenes
+createCardScene('viewport-mri','mri');
+createCardScene('viewport-ct','ct');
+createCardScene('viewport-xray','xray');
+createCardScene('viewport-ultrasound','ultrasound');
+
+// ============================================================
+//  UI LOGIC
+// ============================================================
+let selectedType = null;
+function selectCard(el){
+  document.querySelectorAll('.scan-card').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  selectedType = el.dataset.type;
+}
+
+// File upload
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+['dragenter','dragover'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.add('dragover')}));
+['dragleave','drop'].forEach(e=>uploadZone.addEventListener(e,ev=>{ev.preventDefault();uploadZone.classList.remove('dragover')}));
+uploadZone.addEventListener('drop',e=>{if(e.dataTransfer.files[0])showFile(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',e=>{if(e.target.files[0])showFile(e.target.files[0])});
+function showFile(f){
+  document.getElementById('fileName').textContent=`${f.name} (${(f.size/1024/1024).toFixed(2)} MB)`;
+  document.getElementById('fileInfo').classList.add('visible');
+  uploadZone.classList.add('has-file');
+}
+
+// Analysis
+function runAnalysis(){
+  const btn = document.getElementById('analyzeBtn');
+  btn.classList.add('loading');
+  setTimeout(()=>{
+    btn.classList.remove('loading');
+    const results = document.getElementById('results');
+    results.classList.add('visible');
+    results.scrollIntoView({behavior:'smooth'});
+    let conf=0; const target=97.4;
+    const fill = document.getElementById('meterFill');
+    const val = document.getElementById('confValue');
+    const iv = setInterval(()=>{
+      conf+=1.2;if(conf>=target){conf=target;clearInterval(iv)}
+      fill.style.width=conf+'%';val.textContent=conf.toFixed(1)+'%';
+    },20);
+  },3000);
+}
+
+// Counter animation
+const obs = new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      entry.target.querySelectorAll('.stat-number').forEach(el=>{
+        const target=parseFloat(el.dataset.target);
+        const isFloat=target%1!==0;
+        let cur=0; const step=target/60;
+        const iv = setInterval(()=>{
+          cur+=step;if(cur>=target){cur=target;clearInterval(iv)}
+          el.textContent=isFloat?cur.toFixed(1):Math.floor(cur).toLocaleString();
+        },25);
+      });
+      obs.unobserve(entry.target);
+    }
+  });
+},{threshold:0.3});
+document.querySelectorAll('.stats-bar').forEach(el=>obs.observe(el));
+
+// 3D Card tilt
+document.querySelectorAll('.scan-card').forEach(card=>{
+  card.addEventListener('mousemove',e=>{
+    const rect=card.getBoundingClientRect();
+    const x=(e.clientX-rect.left)/rect.width-0.5;
+    const y=(e.clientY-rect.top)/rect.height-0.5;
+    if(!card.classList.contains('active'))
+      card.style.transform=`perspective(900px) rotateY(${x*18}deg) rotateX(${-y*18}deg) translateY(-8px) scale(1.02)`;
+  });
+  card.addEventListener('mouseleave',()=>{
+    if(!card.classList.contains('active')) card.style.transform='';
+  });
+});
+</script>
+</body>
+</html>
